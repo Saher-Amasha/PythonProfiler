@@ -1,12 +1,12 @@
 import tkinter
 
+from windows.main_window import mainWindow
+
+
+
 def main():
-    root = tkinter.Tk()
-    myLabel = tkinter.Label(root,text="python Profiler")
-    myLabel.pack()
-    # Event loop
-    
-    root.mainloop()
+
+    mainWindow().run()
     print("Hello World!")
 
 
