@@ -1,13 +1,9 @@
-import tkinter
-
-from windows.main_window import mainWindow
-
+from app import app
 
 
 def main():
+    app.run_test_mode()
 
-    mainWindow().run()
-    print("Hello World!")
 
 
 if __name__ == "__main__":
