@@ -24,26 +24,31 @@ class TimeView(Baseview):
         self.update()
 
     def update(self):
-        copy = Model.TIME_STAMPS.copy()
-        if len(copy) > 0:
-            start =list(copy.values())[0].start 
-        for index,i in enumerate(copy):
-            time_stamp = Model.TIME_STAMPS[i]
-            beggening = time_stamp.start - start
-            time = time_stamp.end -  time_stamp.start
-            self.scaler = 50
-            # x, y, x+width, y+height, fill='red'
-            x = beggening.seconds *self.scaler
-            y = index * (self.rectange_height + self.rectange_spacing)
-            width = x + (time.seconds ) *self.scaler
-            height = y + self.rectange_height
-            self.draw_rect( x ,y ,width ,height)    
-            
-            self.canvas.create_text((x  + width )/2 ,(y +height)/2 -self.rectange_height/3 , text=time_stamp.name , fill="white")
-            self.canvas.create_text((x  + width )/2 ,(y +height)/2 , text=str(time.seconds)+' seconds', fill="white")
-            self.canvas.create_text((x  + width )/2 ,(y +height)/2 +self.rectange_height/3, text=time_stamp.id, fill="white")
+            copy = Model.TIME_STAMPS.copy()
+            if len(copy) <=0:
+                return
+
+            mlist = list(copy.values())
+            mlist_sorted= sorted(mlist)
+            # start =mlist_sorted[0].start 
+
+            for index,i in enumerate(mlist_sorted):
+                time_stamp = i
+                beggening = time_stamp.start - Model.START_TIME
+                time = time_stamp.end -  time_stamp.start
+                self.scaler = 50
+                # x, y, x+width, y+height, fill='red'
+                x = beggening.seconds *self.scaler
+                y = index * (self.rectange_height + self.rectange_spacing)
+
+                width = x + (time.seconds ) *self.scaler
+                height = y + self.rectange_height
+                self.draw_rect( x ,y ,width ,height)    
+                
+                self.canvas.create_text((x  + width )/2 ,(y +height)/2 -self.rectange_height/3 , text=time_stamp.name , fill="white")
+                self.canvas.create_text((x  + width )/2 ,(y +height)/2 , text=str(time.seconds)+' seconds', fill="white")
+                self.canvas.create_text((x  + width )/2 ,(y +height)/2 +self.rectange_height/3, text=time_stamp.id, fill="white")
     def draw_rect(self,x1,x2,y1,y2): 
         self.canvas.create_rectangle((x1,x2,y1,y2),fill='red')
-
     def destroy(self):
         self.frame.destroy()

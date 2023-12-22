@@ -26,3 +26,5 @@ class TimeStamp(BaseStamp):
             end = datetime.strptime(split_desc_string[3], TimeStamp.format)
 
             return TimeStamp(id=id,name=name,start=start,end=end)
+    def __lt__(self, other):
+        return self.start < other.start

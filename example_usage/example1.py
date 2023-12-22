@@ -1,22 +1,27 @@
 import random
 from time import sleep
 
-from logic.profiling_decorators import ProfilingDecorators
+from logic.profiling_meta import ProfilingMeta
 
-class Example:
-    @ProfilingDecorators.time_profile
+
+
+
+class Example(metaclass=ProfilingMeta):
+
     @staticmethod
     def ex1_func():
         print("1")
-        sleep(random.randint(0,5))
+        sleep(2)
+        Example.ex2_func()
+        sleep(3)
         print("2")
-    @ProfilingDecorators.time_profile
+
     @staticmethod
     def ex2_func():
         print("1")
-        sleep(random.randint(0,5))
+        sleep(2)
         print("2")
-    @ProfilingDecorators.time_profile
+
     @staticmethod
     def ex3_func():
         print("1")
