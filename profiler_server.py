@@ -1,6 +1,7 @@
 import os
 import socket
 from controller import Model
+from logic.stamps.memory_stamp import MemoryStamp
 
 from logic.stamps.time_stamp import TimeStamp
 
@@ -32,7 +33,7 @@ class ProfilerServer:
             match split_desc_string[0]:
                 case 'time':
                     Model.add_time_stamp(split_desc_string[1],TimeStamp.init_from_bytes(split_desc_string[1:]))
-                case 'mem':
+                case 'memory':
                     # TODO FIX
-                    Model.add_memmory_stamp(split_desc_string[1],TimeStamp.init_from_bytes(split_desc_string[1:]))
+                    Model.add_memmory_stamp(split_desc_string[1],MemoryStamp.init_from_bytes(split_desc_string[1:]))
                     

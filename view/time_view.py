@@ -48,7 +48,3 @@ class TimeView(Baseview):
                 self.canvas.create_text((x  + width )/2 ,(y +height)/2 -self.rectange_height/3 , text=time_stamp.name , fill="white")
                 self.canvas.create_text((x  + width )/2 ,(y +height)/2 , text=str(time.seconds)+' seconds', fill="white")
                 self.canvas.create_text((x  + width )/2 ,(y +height)/2 +self.rectange_height/3, text=time_stamp.id, fill="white")
-    def draw_rect(self,x1,x2,y1,y2): 
-        self.canvas.create_rectangle((x1,x2,y1,y2),fill='red')
-    def destroy(self):
-        self.frame.destroy()
