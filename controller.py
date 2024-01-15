@@ -10,6 +10,9 @@ class Model:
         Model.TIME_STAMPS[id]= val
         # MainWindow.update()
     @staticmethod
+    def clear_time_stamps():
+        Model.TIME_STAMPS=dict()
+    @staticmethod
     def add_memmory_stamp(id,val):
         Model.MEMORY_STAMPS[id]= val
         # MainWindow.update()

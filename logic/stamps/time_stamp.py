@@ -28,4 +28,9 @@ class TimeStamp(BaseStamp):
 
             return TimeStamp(id=id,name=name,file_name=file_name,thread_id=thread_id,start=start,end=end)
     def __lt__(self, other):
-        return self.start < other.start
+
+        if self.start < other.start:
+            return True
+        elif self.start == other.start:
+            if self.end - self.start <  other.end - other.start:
+                return True

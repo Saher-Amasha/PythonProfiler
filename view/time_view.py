@@ -17,8 +17,9 @@ class TimeView(Baseview):
         self.scaler_backup=self.scaler.get()
         s2 = Scale( self.frame, 
                    variable = self.scaler, 
-           from_ = 1, to = 1000, 
-           orient = HORIZONTAL)  
+           from_ = 1, to = 5000, 
+           orient = HORIZONTAL,
+           length=400)  
         s2.pack()
 
         label3 = Label(self.frame,text="min_time seconds")
@@ -28,11 +29,15 @@ class TimeView(Baseview):
         s3 = Scale( self.frame, 
                    variable = self.min_time, 
            from_ = 0, to = 100, 
-           orient = HORIZONTAL)  
+           orient = HORIZONTAL,
+           length=400)  
         s3.pack()
         self.canvas=Canvas(self.frame,bg=self.color,width=self.width,height=self.height,scrollregion=(0,0,self.width*self.canvas_scaler,self.height*self.canvas_scaler))
 
-    
+        self.data_cleared=False
+        self.clear_button=Button( self.frame,text="clear",command=self.clear_data)
+        self.clear_button.pack()
+
         # Create Dropdown menu 
         self.added_threads = False
         self.options = [ 
@@ -48,8 +53,9 @@ class TimeView(Baseview):
         
         self.drawn= 0
     
-
-    
+    def clear_data(self):
+        Model.clear_time_stamps()
+        self.data_cleared=True
     def draw(self):
         self.frame.pack(expand=True, fill=BOTH)
         
@@ -69,12 +75,14 @@ class TimeView(Baseview):
         if (self.min_time.get() != self.min_time_backup
              or self.scaler_backup != self.scaler.get() 
              or self.thread_id_back_up != self.thread_id.get()
-             or self.added_threads):
+             or self.added_threads
+             or self.data_cleared):
             self.__clear()
             self.min_time_backup = self.min_time.get()
             self.scaler_backup = self.scaler.get()
             self.thread_id_back_up = self.thread_id.get()
             self.added_threads = False
+            self.data_cleared = False
             self.drop.pack_forget()
             self.drop = OptionMenu( self.frame , self.thread_id , *self.options ) 
             self.drop.pack(before=self.canvas,fill=X)
@@ -104,20 +112,20 @@ class TimeView(Baseview):
                      self.options.append(time_stamp.thread_id)
                      self.added_threads = True
 
-                if time.seconds <self.min_time.get() or (time_stamp.thread_id != self.thread_id.get() and self.thread_id.get() != Baseview.ALL_THREADS):
+                if time.microseconds/1000000 <self.min_time.get() or (time_stamp.thread_id != self.thread_id.get() and self.thread_id.get() != Baseview.ALL_THREADS):
                      pushback +=1
                      continue
 
-                x = beggening.seconds *scaler
+                x = beggening.microseconds/ 1000000 *scaler
                 y = (index- pushback) * (self.rectange_height + self.rectange_spacing)
 
-                width = x + (time.seconds ) *scaler
+                width = x + (time.microseconds/1000000 ) *scaler
                 height = y + self.rectange_height
                 if index > self.drawn:
                     self.draw_rect( x ,y ,width ,height,hash(time_stamp.name))
                     
                     self.canvas.create_text((x  + width )/2 ,(y +height)/2 -self.rectange_height/3 , text=time_stamp.name , fill="white")
-                    self.canvas.create_text((x  + width )/2 ,(y +height)/2 , text=str(time.seconds)+' seconds', fill="white")
+                    self.canvas.create_text((x  + width )/2 ,(y +height)/2 , text=str(time.microseconds/1000000)+' seconds', fill="white")
                     self.canvas.create_text((x  + width )/2 ,(y +height)/2 +self.rectange_height/3, text=time_stamp.file_name, fill="white")
             self.drawn = len(mlist) - self.drawn
             if self.added_threads:
