@@ -10,6 +10,7 @@ class MemoryView(Baseview):
         self.root=root
         self.frame=Frame(self.root,width=self.width,height=self.height)
         label = Label(self.frame,text="Memory profiling")
+        label.pack()
         copy = Model.MEMORY_STAMPS.copy()
 
         mlist = list(copy.values())

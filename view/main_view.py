@@ -1,3 +1,5 @@
+import threading
+from time import sleep
 import tkinter
 from PIL import ImageTk
 from tkinter import *
@@ -35,11 +37,13 @@ class MainView():
         self.memoryButton.pack()
         self.buttotns.append(self.memoryButton)
         
-        # self.networkButton=tkinter.Button( self.root,text="network",command=self.network_window)
-        # self.networkButton.grid(row=0,column=2,columnspan=5,sticky='w')
-    @staticmethod
-    def update():
-        MainView.CurrentWindow.update()
+        # init to time view 
+        self.time_window()
+
+    def update(self):
+        if MainView.CurrentWindow != None:
+            MainView.CurrentWindow.update() 
+    
     def memory_view(self):
         for button in self.buttotns:
             button["state"] = "active"
@@ -47,7 +51,7 @@ class MainView():
             frame.destroy()
         
         self.memory_view = MemoryView(self.root)
-        MainView.CurrentWindow = self.time_window
+        MainView.CurrentWindow = self.memory_view
         self.frames.append(self.memory_view)
         self.memoryButton["state"] = "disabled"
         self.memory_view.draw()
@@ -63,14 +67,13 @@ class MainView():
         self.time_button["state"] = "disabled"
         self.time_window.draw()
 
+    def continues_update(self):
+        while True:
+            sleep(1)
+            self.update()
 
-    
-    # def network_window(self):
-    #     for button in self.buttotns:
-    #         button["state"] = "active"
-    #     label = tkinter.Label(self.root,text="network profiling")
-    #     label.grid(row=1,column=1)
 
     def run(self):
         # Event loop 
+        threading.Thread(target=self.continues_update).start()
         self.root.mainloop()

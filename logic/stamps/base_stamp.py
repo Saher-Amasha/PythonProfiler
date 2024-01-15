@@ -8,3 +8,5 @@ class BaseStamp():
     """
     id:str
     name:str
+    file_name:str
+    thread_id:str
