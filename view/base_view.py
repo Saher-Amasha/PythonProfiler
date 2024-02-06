@@ -9,9 +9,9 @@ class Baseview:
     color:str = '#FFFFFF'
     canvas_scaler:int=1000
     rectange_height:int = 60
-    rectange_width:int = 20
+    rectange_width:int =200
     rectange_spacing:int = 5 
-    def draw_rect(self,x1,x2,y1,y2,fill='red'): 
+    def draw_rect(self,x1,x2,y1,y2,fill=1): 
         self.canvas.create_rectangle((x1,x2,y1,y2),fill=self.num_to_color(abs(fill)))
     def destroy(self):
         self.frame.destroy()
