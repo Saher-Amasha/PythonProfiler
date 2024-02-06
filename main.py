@@ -2,7 +2,7 @@ from app import app
 
 
 def main():
-    app.run_test_mode()
+    app.run()
 
 
 

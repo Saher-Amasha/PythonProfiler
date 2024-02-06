@@ -9,7 +9,7 @@ from logic.stamps.time_stamp import TimeStamp
 
 class ProfilerServer:
     HOST = os.environ.get('HOST', "127.0.0.1") 
-    PORT = int(os.environ.get('PORT', "65433") )
+    PORT = int(os.environ.get('PORT', "65434") )
     @staticmethod
     def run():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
