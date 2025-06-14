@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Python Profiler Viewer</title>
+
+  <!-- D3 -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+  <!-- Split.js -->
+  <script src="https://unpkg.com/split.js/dist/split.min.js"></script>
+
+  <!-- Profiler logic -->
+  <script src="profiler.js" defer></script>
+<style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #1e1e1e;
+      color: #dcdcdc;
+    }
+
+    h1 {
+      text-align: center;
+      margin: 10px 0;
+      color: #f0f0f0;
+    }
+
+    #controls {
+      text-align: center;
+      margin-bottom: 5px;
+    }
+
+    label[for="comparisonFile"] {
+      padding: 12px 25px;
+      border-radius: 30px;
+      background: orange;
+      color: white;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 3px 5px rgba(0, 0, 0, 0.4);
+      transition: background 0.3s ease;
+      display: inline-block;
+    }
+
+    label[for="comparisonFile"]:hover {
+      background: darkorange;
+    }
+
+    label[for="logFile"] {
+      padding: 12px 25px;
+      border-radius: 30px;
+      background: orange;
+      color: white;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 3px 5px rgba(0, 0, 0, 0.4);
+      transition: background 0.3s ease;
+      display: inline-block;
+    }
+
+    label[for="logFile"]:hover {
+      background: darkorange;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    #split {
+      flex: 1;
+      display: flex;
+      height: 100%;
+    }
+
+    #left,
+    #right {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #left {
+      padding: 5px;
+      border-right: 1px solid #3a3a3a;
+    }
+
+    /* Call Tree box matching right tabs */
+    #left .tab {
+      padding: 10px 20px;
+      border: 1px solid #3a3a3a;
+      border-bottom: none;
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+      background: #2b2b2b;
+      color: #dcdcdc;
+      margin-right: 5px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      font-weight: bold;
+    }
+
+    #tree {
+      width: 100%;
+      height: calc(100vh - 120px);
+      border: 1px solid #3a3a3a;
+      border-radius: 15px;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+      background: #2b2b2b;
+    }
+
+    #tabs {
+      display: flex;
+      border-bottom: 1px solid #3a3a3a;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      border: 1px solid #3a3a3a;
+      border-bottom: none;
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+      background: #2b2b2b;
+      color: #dcdcdc;
+      margin-right: 5px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      cursor: pointer;
+    }
+
+    .tab.active {
+      background: #3b3b3b;
+      border-color: #5a5a5a;
+      font-weight: bold;
+    }
+
+    .tab-content {
+      display: none;
+      height: calc(100% - 40px);
+      overflow: auto;
+      padding: 10px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .tab-content>div {
+      border: 1px solid #3a3a3a;
+      border-radius: 12px;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+      background: #2b2b2b;
+      padding: 10px;
+      height: 100%;
+      box-sizing: border-box;
+    }
+
+    #timeline {
+      height: 100%;
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+
+    .selected-node circle {
+      fill: orange !important;
+    }
+
+    table.profiler-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #444;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+      background: #2b2b2b;
+    }
+
+    table.profiler-table th {
+      background: #333;
+      color: #f0f0f0;
+      padding: 8px;
+      border: 1px solid #555;
+    }
+
+    table.profiler-table td {
+      padding: 8px;
+      border: 1px solid #555;
+    }
+    .profiler-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.profiler-table td {
+  padding: 5px;
+  border: 1px solid #444;
+  color: #dcdcdc;
+  background: #2b2b2b;
+}
+  </style>
+</head>
+
+<body>
+
+  <h1>Python Profiler Viewer</h1>
+
+  <div id="controls">
+    <label for="logFile">Choose Profiler Log</label>
+    <input type="file" id="logFile" />
+  </div>
+
+  <div id="split">
+    <div id="left">
+      <div class="tab active">Call Tree</div>
+      <div id="tree"></div>
+    </div>
+
+    <div id="right">
+      <div id="tabs">
+        <div class="tab active" data-tab="timelineTab">Timeline</div>
+        <div class="tab" data-tab="flamegraphTab">Flamegraph</div>
+        <div class="tab" data-tab="summaryTab">Summary</div>
+        <div class="tab" data-tab="detailsTab">Details</div>
+        <div class="tab" data-tab="compareTab">Compare</div>
+      </div>
+
+      <div id="timelineTab" class="tab-content active"><div id="timeline"></div></div>
+      <div id="flamegraphTab" class="tab-content"><div id="flamegraphView"></div></div>
+      <div id="summaryTab" class="tab-content"><div id="summaryTable"></div></div>
+      <div id="detailsTab" class="tab-content"><div id="functionInfo"></div></div>
+      <div id="compareTab" class="tab-content"><div id="compareTable"></div></div>
+    </div>
+  </div>
+
+  <!-- Inline Streaming Worker -->
+  <script>
+    const workerCode = `
+    self.addEventListener("message", async function(e) {
+      const file = e.data.file;
+      const CHUNK_SIZE = 1024 * 1024;
+      let offset = 0;
+      const decoder = new TextDecoder();
+      let leftover = '';
+
+      async function readChunk() {
+        const slice = file.slice(offset, offset + CHUNK_SIZE);
+        const reader = new FileReader();
+
+        reader.onload = async function(e) {
+          const text = decoder.decode(e.target.result);
+          const combined = leftover + text;
+          const lines = combined.split('\\n');
+          leftover = lines.pop();
+
+          let batch = [];
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const arr = JSON.parse(line);
+              const obj = {
+                time: arr[0],
+                event: arr[1],
+                function: arr[2],
+                call_id: arr[3],
+                parent_call_id: arr[4],
+                type: arr[5]
+              };
+              batch.push(obj);
+            } catch (err) {
+              self.postMessage({ type: "error", message: err.toString() });
+            }
+          }
+
+          if (batch.length > 0) {
+            self.postMessage({ type: "batch", data: batch });
+            await new Promise(r => setTimeout(r, 0)); // yield control
+          }
+
+          offset += CHUNK_SIZE;
+          self.postMessage({ type: "progress", loaded: offset, total: file.size });
+
+          if (offset < file.size) {
+            readChunk();
+          } else if (leftover.trim()) {
+            try {
+              const arr = JSON.parse(leftover);
+              const obj = {
+                time: arr[0],
+                event: arr[1],
+                function: arr[2],
+                call_id: arr[3],
+                parent_call_id: arr[4],
+                type: arr[5]
+              };
+              self.postMessage({ type: "batch", data: [obj] });
+            } catch (err) {
+              self.postMessage({ type: "error", message: err.toString() });
+            }
+            self.postMessage({ type: "done" });
+          } else {
+            self.postMessage({ type: "done" });
+          }
+        };
+
+        reader.readAsArrayBuffer(slice);
+      }
+
+      readChunk();
+    });
+    `;
+
+    const blob = new Blob([workerCode], { type: "application/javascript" });
+    const workerURL = URL.createObjectURL(blob);
+
+    let worker;
+
+    document.getElementById("logFile").addEventListener("change", function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      // Reset state
+      calls = {};
+      idMap = {};
+      treeRoot = null;
+      processedBatches = 0;
+
+      worker = new Worker(workerURL);
+      worker.postMessage({ file });
+
+      worker.addEventListener("message", function (e) {
+        const { type, data, message, loaded, total } = e.data;
+
+        if (type === "batch") {
+          processBatch(data);
+          maybeRender();
+        }
+
+        if (type === "progress") {
+          console.log(`Loaded \${((loaded / total) * 100).toFixed(2)}%`);
+        }
+
+        if (type === "error") {
+          console.error("Worker error:", message);
+        }
+
+        if (type === "done") {
+          finalizeProcessing(true);
+        }
+      });
+    });
+
+    // Split.js resizing remains unchanged
+    const splitInstance = Split(['#left', '#right'], {
+      sizes: [30, 70],
+      minSize: 200,
+      onDragEnd: () => {
+        Plotly.Plots.resize(document.getElementById('timeline'));
+        if (typeof renderTree === 'function' && treeRoot) renderTree(treeRoot);
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      Plotly.Plots.resize(document.getElementById('timeline'));
+      if (typeof renderTree === 'function' && treeRoot) renderTree(treeRoot);
+    });
+
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById(tab.dataset.tab).classList.add("active");
+
+        if (tab.dataset.tab === "timelineTab") {
+          setTimeout(() => Plotly.Plots.resize(document.getElementById('timeline')), 50);
+        }
+      });
+    });
+  </script>
+
+</body>
+
+</html>
