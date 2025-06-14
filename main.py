@@ -15,7 +15,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     provided_base_dir: str = os.path.abspath(sys.argv[1])
-     
+
     generated_internal_dir: str = os.path.join(provided_base_dir, "profiler_internal_files")
     generated_backup_dir: str = os.path.join(generated_internal_dir, "backup")
 
