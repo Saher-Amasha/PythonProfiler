@@ -182,8 +182,8 @@ def create_backup_all(internal_files: str, base_dir: str):
             ) != os.path.abspath(__file__):
                 original_files.append((full_path, base_dir, backup_dir))
 
-    for filepath, base_dir, backup_dir in original_files:
-        backup_file(filepath, base_dir, backup_dir)
+    for filepath, c_base_dir, backup_dir in original_files:
+        backup_file(filepath, c_base_dir, backup_dir)
 
 
 def inject_all(base_dir_path: str) -> None:
@@ -199,7 +199,7 @@ def inject_all(base_dir_path: str) -> None:
     # Add profiler code
     copy_profiler_module(internal_files_path)
 
-    # Add ui code 
+    # Add ui code
     copy_file(base_dir_path,"profiler.js")
     copy_file(base_dir_path,"index.html")
     # create backup

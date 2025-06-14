@@ -91,37 +91,33 @@ def profile(func: Callable[..., Any]) -> Callable[..., Any]:
 
         return async_wrapper
 
-    else:
-        @functoolsProfilerProtected.wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            context = enter_function(func.__qualname__)
-            call_id = context['call_id']
-            parent_call_id = context['parent_call_id']
-
+    @functoolsProfilerProtected.wraps(func)
+    def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+        context = enter_function(func.__qualname__)
+        call_id = context['call_id']
+        parent_call_id = context['parent_call_id']
+        now = datetimeProfilerProtected.datetime.now()
+        start_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
+        log_record([
+             start_time,
+             "start",
+             func.__qualname__,
+             call_id,
+             parent_call_id,
+             "sync"
+        ])
+        try:
+            return func(*args, **kwargs)
+        finally:
             now = datetimeProfilerProtected.datetime.now()
-            start_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
+            end_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
             log_record([
-                 start_time,
-                 "start",
+                 end_time,
+                 "end",
                  func.__qualname__,
                  call_id,
                  parent_call_id,
                  "sync"
-            ])
-
-            try:
-                return func(*args, **kwargs)
-            finally:
-                now = datetimeProfilerProtected.datetime.now()
-                end_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
-                log_record([
-                     end_time,
-                     "end",
-                     func.__qualname__,
-                     call_id,
-                     parent_call_id,
-                     "sync"
-            ])
-                exit_function()
-
-        return sync_wrapper
+        ])
+            exit_function()
+    return sync_wrapper
