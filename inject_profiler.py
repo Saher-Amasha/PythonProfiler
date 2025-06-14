@@ -31,7 +31,7 @@ class DecoratorInjector(ast.NodeTransformer):
     into every function and async function.
     """
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef: # pylint: disable=invalid-name
         """
         Visits all functions in the module
         """
@@ -41,7 +41,7 @@ class DecoratorInjector(ast.NodeTransformer):
             node.decorator_list.insert(0, ast.Name(id="profile", ctx=ast.Load()))
         return self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(
+    def visit_AsyncFunctionDef( # pylint: disable=invalid-name
         self, node: ast.AsyncFunctionDef
     ) -> ast.AsyncFunctionDef:
         """
