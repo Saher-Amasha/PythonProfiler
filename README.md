@@ -20,7 +20,7 @@ Profiler expects newline-delimited JSON arrays (`.jsonl`), where each line repre
 
 ```json
 ["17:54:12.457", "start", "function_name", 123, 122, "sync"]
-
+```
 
 ![image](https://github.com/user-attachments/assets/3f38d4f1-f72f-473e-92b0-1431ef5fbadc)
 ![image](https://github.com/user-attachments/assets/f1b39497-af44-405b-89cb-5a538a4803f2)
