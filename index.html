@@ -27,6 +27,11 @@
       flex-direction: column;
       background: #1e1e1e;
       color: #dcdcdc;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
     }
 
     h1 {
@@ -79,20 +84,24 @@
     }
 
     #split {
-      flex: 1;
       display: flex;
-      height: 100%;
+      flex-direction: row;
+      height: 100vh;
     }
 
-    #left,
     #right {
-      height: 100%;
-      overflow: hidden;
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
     }
 
     #left {
-      padding: 5px;
-      border-right: 1px solid #3a3a3a;
+      width: 30%;
+      border-right: 1px solid #333;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     /* Call Tree box matching right tabs */
@@ -107,32 +116,56 @@
       margin-right: 5px;
       box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
       font-weight: bold;
+
     }
 
     #tree {
       width: 100%;
       height: calc(100vh - 120px);
+      overflow-y: auto;
       border: 1px solid #3a3a3a;
-      box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
       background: #2b2b2b;
+      position: relative;
+      contain: layout paint size;
+
+    }
+
+    #tree::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    #tree::-webkit-scrollbar-thumb {
+      background-color: #666;
+      border-radius: 5px;
+    }
+
+    #tree::-webkit-scrollbar-track {
+      background-color: #222;
+    }
+
+    .profiler-table td {
+      padding: 4px 8px;
     }
 
     #tabs {
+      height: 40px;
+      background: #222;
       display: flex;
-      border-bottom: 1px solid #3a3a3a;
+      flex-direction: row;
+      align-items: center;
+      padding: 0 10px;
     }
 
+
     .tab {
+      display: inline-block;
       padding: 10px 20px;
-      border: 1px solid #3a3a3a;
-      border-bottom: none;
-      border-top-left-radius: 10px;
-      border-top-right-radius: 10px;
-      background: #2b2b2b;
-      color: #dcdcdc;
       margin-right: 5px;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      border: 1px solid #3a3a3a;
+      background: #2b2b2b;
+      color: #fff;
       cursor: pointer;
+      white-space: nowrap;
     }
 
     .tab.active {
@@ -142,18 +175,28 @@
     }
 
     .tab-content {
-      display: none;
-      height: calc(100% - 40px);
-      overflow: auto;
-      padding: 10px;
+      position: absolute;
+      top: 40px;
+      /* height of tabs */
+      left: 0;
+      right: 0;
+      bottom: 0;
+      visibility: hidden;
+      z-index: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     .tab-content.active {
-      display: block;
+      visibility: visible;
+      z-index: 1;
     }
 
     #flamegraphView svg {
       background: #1e1e1e;
+      contain: layout paint size;
+
     }
 
     .tab-content>div {
@@ -228,6 +271,7 @@
     </div>
 
     <div id="right">
+
       <div id="tabs">
         <div class="tab active" data-tab="timelineTab">Timeline</div>
         <div class="tab" data-tab="flamegraphTab">Flamegraph</div>
@@ -235,7 +279,6 @@
         <div class="tab" data-tab="detailsTab">Details</div>
         <div class="tab" data-tab="compareTab">Compare</div>
       </div>
-
       <div id="timelineTab" class="tab-content active">
         <div id="timeline"></div>
       </div>
@@ -333,6 +376,7 @@
 
     const blob = new Blob([workerCode], { type: "application/javascript" });
     const workerURL = URL.createObjectURL(blob);
+    let flamegraphActive = false;
 
     let worker;
 

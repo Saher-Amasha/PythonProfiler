@@ -7,23 +7,28 @@ const renderEvery = 5;
 const MAX_NODES = 5000;
 const MAX_TIMELINE = 5000;
 
+let treeRenderTimeout = null;
+let flamegraphRenderTimeout = null;
+let summaryRenderTimeout = null;
+
+const BUFFER_ROWS = 10;  // render slightly more than viewport to avoid blank areas
+let rowPool = [];
 
 
-
-function CallEntity(call_id, start,end, parent_call_id,children,type,expanded,functionName) {
+function CallEntity(call_id, start, end, parent_call_id, children, type, expanded, functionName) {
   this.call_id = call_id;
-  
+
   this.start = start;
-  this.end=end;
-  
-  this.parent_call_id= parent_call_id;
+  this.end = end;
+
+  this.parent_call_id = parent_call_id;
   this.children = children
 
-  this.type=type;
-  this.expanded=expanded;
+  this.type = type;
+  this.expanded = expanded;
 
-  this.function=functionName;
-  
+  this.function = functionName;
+
 }
 
 
@@ -32,7 +37,7 @@ function buildCallMap(calls) {
   const map = {};
   for (const id in calls) {
     var cCall = calls[id];
-    map[id] = new CallEntity(cCall["call_id"]  ,cCall["start"],cCall["end"]  ,cCall["parent_call_id"],[],cCall["type"], cCall?.expanded ?? false , cCall["function"])
+    map[id] = new CallEntity(cCall["call_id"], cCall["start"], cCall["end"], cCall["parent_call_id"], [], cCall["type"], cCall?.expanded ?? false, cCall["function"])
   }
   for (const id in map) {
     const node = map[id];
@@ -47,14 +52,17 @@ function buildCallMap(calls) {
 
 function finalizeProcessing() {
   idMap = buildCallMap(calls);
-  treeRoot = buildTree(idMap);
-  renderTree(treeRoot);
+  const forest = buildForest(idMap);
+  renderForest(forest);
   renderTimeline(Object.values(calls));
   renderSummary(computeAggregates(Object.values(calls)));
 
   if (flamegraphActive) {
     requestFlamegraphRender();
   }
+
+  if (treeRoot) showFunctionDetails(treeRoot);
+
 }
 
 function renderSummary(aggregates) {
@@ -82,10 +90,11 @@ function parseTime(timeStr) {
 
 
 
-// Streaming batch processing
 function processBatch(batch) {
   for (const entry of batch) {
     const id = entry.call_id;
+
+    // Create or update call
     if (!calls[id]) {
       calls[id] = {
         call_id: id,
@@ -96,13 +105,37 @@ function processBatch(batch) {
         end: null
       };
     }
+
     if (entry.event === "start") {
       calls[id].start = parseTime(entry.time);
     } else if (entry.event === "end") {
       calls[id].end = parseTime(entry.time);
-      // Update flamegraph only when both start & end exist
       if (calls[id].start) {
         addToFlamegraph(calls[id]);
+      }
+    }
+
+    // Build idMap on-the-fly
+    if (!idMap[id]) {
+      idMap[id] = new CallEntity(
+        id,
+        calls[id].start,
+        calls[id].end,
+        calls[id].parent_call_id,
+        [],
+        calls[id].type,
+        false,
+        calls[id].function
+      );
+    } else {
+      idMap[id].start = calls[id].start;
+      idMap[id].end = calls[id].end;
+    }
+
+    // Link to parent
+    if (calls[id].parent_call_id && idMap[calls[id].parent_call_id]) {
+      if (!idMap[calls[id].parent_call_id].children.includes(idMap[id])) {
+        idMap[calls[id].parent_call_id].children.push(idMap[id]);
       }
     }
   }
@@ -111,22 +144,53 @@ function processBatch(batch) {
 
 function maybeRender() {
   if (processedBatches % renderEvery === 0) {
-    renderPartial();
+    requestSummaryRender();
+    requestTreeRender();
+    requestFlamegraphRender();
 
-    if (flamegraphActive) {
-      requestFlamegraphRender();
-    }
+    if (flamegraphActive) requestFlamegraphRender();
   }
 }
 
+let flamegraphLastRender = 0;
+const flamegraphRenderInterval = 100;
 
+function requestFlamegraphRender() {
+  const now = performance.now();
+  if (now - flamegraphLastRender >= flamegraphRenderInterval) {
+    flamegraphLastRender = now;
+    renderFlamegraph(flamegraphRoot);
+  }
+}
+
+let treeLastRender = 0;
+
+const treeRenderInterval = 100;
+
+function requestTreeRender() {
+  const now = performance.now();
+  if (now - treeLastRender >= treeRenderInterval) {
+    treeLastRender = now;
+    renderForestSnapshot = buildForest(idMap);
+    renderVirtualTree(renderForestSnapshot);
+  }
+}
 function renderPartial() {
   const partialAgg = computeAggregates(Object.values(calls));
   renderSummary(partialAgg);
 }
 
+let summaryLastRender = 0;
+const summaryRenderInterval = 100;
 
-
+function requestSummaryRender() {
+  const now = performance.now();
+  if (now - summaryLastRender >= summaryRenderInterval) {
+    summaryLastRender = now;
+    const aggregates = computeAggregates(Object.values(calls));
+    renderSummary(aggregates);
+  }
+}
 
 function flattenVisibleTree(node, result = [], depth = 0) {
   result.push({ node, depth });
@@ -138,18 +202,19 @@ function flattenVisibleTree(node, result = [], depth = 0) {
   return result;
 }
 
-function buildTree(idMap) {
+function buildForest(idMap) {
+  const roots = [];
   for (const id in idMap) {
-    if (idMap[id].parent_call_id == null || !idMap[idMap[id].parent_call_id]) {
-      return idMap[id];
+    const node = idMap[id];
+    if (!node.parent_call_id || !idMap[node.parent_call_id]) {
+      roots.push(node);
     }
   }
-  return null;
+  return roots;
 }
 
-function renderTree(treeData) {
-  if (!treeData) return;
 
+function renderForest(forest) {
   const container = document.getElementById("tree");
   container.innerHTML = "";
 
@@ -157,35 +222,179 @@ function renderTree(treeData) {
   table.className = "profiler-table";
   container.appendChild(table);
 
-  const visibleNodes = flattenVisibleTree(treeData);
-  
-  for (const { node, depth } of visibleNodes) {
-    const row = table.insertRow();
-    const cell = row.insertCell();
+  for (const root of forest) {
+    renderSubtree(root, table, 0);
+  }
+}
 
-    cell.style.paddingLeft = (depth * 20) + "px";
+function renderSubtree(node, table, depth) {
+  const row = table.insertRow();
+  const cell = row.insertCell();
+  cell.style.paddingLeft = (depth * 20) + "px";
 
-    // Expand/collapse toggle
+  if (node.children.length > 0) {
+    const toggle = document.createElement("span");
+    toggle.textContent = node.expanded ? "▼ " : "▶ ";
+    toggle.style.cursor = "pointer";
+    toggle.onclick = () => {
+      node.expanded = !node.expanded;
+      renderForest(buildForest(idMap));
+    };
+    cell.appendChild(toggle);
+  } else {
+    cell.textContent = "• ";
+  }
+
+  const label = document.createElement("span");
+  label.textContent = `${node.function} (${node.call_id})`;
+  label.style.cursor = "pointer";
+  label.onclick = () => showFunctionDetails(node);
+  cell.appendChild(label);
+
+  if (node.expanded) {
+    for (const child of node.children) {
+      renderSubtree(child, table, depth + 1);
+    }
+  }
+}
+
+
+const ROW_HEIGHT = 25;
+
+function renderVirtualTree(forest) {
+  const container = document.getElementById("tree");
+  const visibleNodes = [];
+  for (const root of forest) {
+    flattenVisibleTree(root, visibleNodes);
+  }
+
+  const totalHeight = visibleNodes.length * ROW_HEIGHT;
+
+  let scroller;
+  if (rowPool.length === 0) {
+    const viewportHeight = container.clientHeight;
+    const poolSize = Math.ceil(viewportHeight / ROW_HEIGHT) + BUFFER_ROWS;
+    scroller = initRowPool(container, poolSize);
+  } else {
+    scroller = container.firstChild;
+  }
+
+  scroller.style.height = totalHeight + "px";
+
+  // Attach scroll handler
+  container.onscroll = () => {
+    updateVirtualTree(container, scroller, visibleNodes);
+  };
+
+  updateVirtualTree(container, scroller, visibleNodes);
+}
+
+function updateVirtualTree(container, scroller, visibleNodes) {
+  const scrollTop = container.scrollTop;
+  const firstIndex = Math.floor(scrollTop / ROW_HEIGHT);
+  const poolSize = rowPool.length;
+
+  for (let i = 0; i < poolSize; i++) {
+    const nodeIndex = firstIndex + i;
+    const row = rowPool[i];
+
+    if (nodeIndex >= visibleNodes.length) {
+      row.style.display = "none";
+      continue;
+    }
+
+    row.style.display = "flex";
+    row.style.top = (nodeIndex * ROW_HEIGHT) + "px";
+    const { node, depth } = visibleNodes[nodeIndex];
+
+    row.innerHTML = "";  // Replace with smart row reuse later
+
+    row.style.paddingLeft = (depth * 20) + "px";
+
     if (node.children.length > 0) {
       const toggle = document.createElement("span");
       toggle.textContent = node.expanded ? "▼ " : "▶ ";
-      toggle.style.cursor = "pointer";
-      toggle.onclick = () => {
+      toggle.style.marginRight = "5px";
+      toggle.onclick = (e) => {
+        e.stopPropagation();
         node.expanded = !node.expanded;
-        renderTree(treeData); // re-render after toggle
+        renderVirtualTree(buildForest(idMap));
       };
-      cell.appendChild(toggle);
+      row.appendChild(toggle);
     } else {
-      cell.textContent = "• ";
+      row.appendChild(document.createTextNode("• "));
     }
 
     const label = document.createElement("span");
     label.textContent = `${node.function} (${node.call_id})`;
-    label.style.cursor = "pointer";
     label.onclick = () => showFunctionDetails(node);
-    cell.appendChild(label);
+    row.appendChild(label);
   }
 }
+
+function initRowPool(container, poolSize) {
+  const scroller = document.createElement("div");
+  scroller.style.position = "relative";
+  scroller.style.width = "100%";
+  container.innerHTML = "";
+  container.appendChild(scroller);
+  rowPool = [];
+
+  for (let i = 0; i < poolSize; i++) {
+    const row = document.createElement("div");
+    row.style.position = "absolute";
+    row.style.left = "0";
+    row.style.right = "0";
+    row.style.height = ROW_HEIGHT + "px";
+    row.style.display = "flex";
+    row.style.alignItems = "center";
+    row.style.paddingLeft = "0px";
+    row.style.cursor = "pointer";
+    rowPool.push(row);
+    scroller.appendChild(row);
+  }
+
+  return scroller;
+}
+// function renderTree(treeData) {
+//   if (!treeData) return;
+
+//   const container = document.getElementById("tree");
+//   container.innerHTML = "";
+
+//   const table = document.createElement("table");
+//   table.className = "profiler-table";
+//   container.appendChild(table);
+
+//   const visibleNodes = flattenVisibleTree(treeData);
+
+//   for (const { node, depth } of visibleNodes) {
+//     const row = table.insertRow();
+//     const cell = row.insertCell();
+
+//     cell.style.paddingLeft = (depth * 20) + "px";
+
+//     // Expand/collapse toggle
+//     if (node.children.length > 0) {
+//       const toggle = document.createElement("span");
+//       toggle.textContent = node.expanded ? "▼ " : "▶ ";
+//       toggle.style.cursor = "pointer";
+//       toggle.onclick = () => {
+//         node.expanded = !node.expanded;
+//         renderTree(treeData); // re-render after toggle
+//       };
+//       cell.appendChild(toggle);
+//     } else {
+//       cell.textContent = "• ";
+//     }
+
+//     const label = document.createElement("span");
+//     label.textContent = `${node.function} (${node.call_id})`;
+//     label.style.cursor = "pointer";
+//     label.onclick = () => showFunctionDetails(node);
+//     cell.appendChild(label);
+//   }
+// }
 // === SAFE TIMELINE RENDERING ===
 function renderTimeline(callArray) {
   const limited = callArray.slice(0, MAX_TIMELINE);
@@ -273,7 +482,6 @@ function buildFlamegraphTree(calls) {
 
 
 
-let flamegraphActive = false;
 let flamegraphSVG = null;
 let flamegraphG = null;
 let flamegraphPendingRender = false;
@@ -416,15 +624,4 @@ function addToFlamegraph(call) {
     node = child;
   }
   node.value += call.end - call.start;
-}
-
-let flamegraphRenderTimeout = null;
-
-function requestFlamegraphRender() {
-  if (flamegraphRenderTimeout) {
-    clearTimeout(flamegraphRenderTimeout);
-  }
-  flamegraphRenderTimeout = setTimeout(() => {
-    renderFlamegraph(flamegraphRoot);
-  }, 50);  // slight delay to batch fast incoming updates
 }
