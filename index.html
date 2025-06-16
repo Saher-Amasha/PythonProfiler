@@ -16,7 +16,7 @@
 
   <!-- Profiler logic -->
   <script src="profiler.js" defer></script>
-<style>
+  <style>
     body {
       font-family: Arial, sans-serif;
       margin: 0;
@@ -113,7 +113,6 @@
       width: 100%;
       height: calc(100vh - 120px);
       border: 1px solid #3a3a3a;
-      border-radius: 15px;
       box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
       background: #2b2b2b;
     }
@@ -153,6 +152,10 @@
       display: block;
     }
 
+    #flamegraphView svg {
+      background: #1e1e1e;
+    }
+
     .tab-content>div {
       border: 1px solid #3a3a3a;
       border-radius: 12px;
@@ -166,9 +169,6 @@
     #timeline {
       height: 100%;
       width: 100%;
-      border-radius: 12px;
-      overflow: hidden;
-      padding: 10px;
       box-sizing: border-box;
     }
 
@@ -197,17 +197,18 @@
       padding: 8px;
       border: 1px solid #555;
     }
-    .profiler-table {
-  width: 100%;
-  border-collapse: collapse;
-}
 
-.profiler-table td {
-  padding: 5px;
-  border: 1px solid #444;
-  color: #dcdcdc;
-  background: #2b2b2b;
-}
+    .profiler-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .profiler-table td {
+      padding: 5px;
+      border: 1px solid #444;
+      color: #dcdcdc;
+      background: #2b2b2b;
+    }
   </style>
 </head>
 
@@ -235,11 +236,21 @@
         <div class="tab" data-tab="compareTab">Compare</div>
       </div>
 
-      <div id="timelineTab" class="tab-content active"><div id="timeline"></div></div>
-      <div id="flamegraphTab" class="tab-content"><div id="flamegraphView"></div></div>
-      <div id="summaryTab" class="tab-content"><div id="summaryTable"></div></div>
-      <div id="detailsTab" class="tab-content"><div id="functionInfo"></div></div>
-      <div id="compareTab" class="tab-content"><div id="compareTable"></div></div>
+      <div id="timelineTab" class="tab-content active">
+        <div id="timeline"></div>
+      </div>
+      <div id="flamegraphTab" class="tab-content">
+        <div id="flamegraphView"></div>
+      </div>
+      <div id="summaryTab" class="tab-content">
+        <div id="summaryTable"></div>
+      </div>
+      <div id="detailsTab" class="tab-content">
+        <div id="functionInfo"></div>
+      </div>
+      <div id="compareTab" class="tab-content">
+        <div id="compareTable"></div>
+      </div>
     </div>
   </div>
 
@@ -248,7 +259,7 @@
     const workerCode = `
     self.addEventListener("message", async function(e) {
       const file = e.data.file;
-      const CHUNK_SIZE = 1024 * 1024;
+      const CHUNK_SIZE = 2024 * 2024  ;
       let offset = 0;
       const decoder = new TextDecoder();
       let leftover = '';
@@ -385,8 +396,29 @@
         if (tab.dataset.tab === "timelineTab") {
           setTimeout(() => Plotly.Plots.resize(document.getElementById('timeline')), 50);
         }
+
+        if (tab.dataset.tab === "flamegraphTab") {
+          flamegraphActive = true;
+          renderFlamegraph(flamegraphRoot);
+        } else {
+          flamegraphActive = false;
+        }
       });
     });
+
+
+
+
+
+
+    resizeObserver = new ResizeObserver(() => {
+      if (flamegraphActive) {
+        renderFlamegraph(flamegraphRoot);
+      }
+    });
+    resizeObserver.observe(document.getElementById("flamegraphView"));
+
+
   </script>
 
 </body>
