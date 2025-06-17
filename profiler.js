@@ -25,24 +25,6 @@ const renderEvery = 5;
 
 
 
-// classes
-function CallEntity(call_id, start,end, parent_call_id,children,type,expanded,functionName) {
-  this.call_id = call_id;
-  
-  this.start = start;
-  this.end=end;
-  
-  this.parent_call_id= parent_call_id;
-  this.children = children
-
-  this.type=type;
-  this.expanded=expanded;
-
-  this.function=functionName;
-  
-}
-
-
 // processing 
 
 function finalizeProcessing() {
@@ -89,8 +71,8 @@ function processBatch(batch) {
       cCall.end = parseTime(entry.time);
     
 
-    // if (cCall.start && cCall.end)
-    //     addToFlamegraph(cCall);
+    if (cCall.start && cCall.end)
+        addToFlamegraph(cCall);
       
     // Link to parent
     if (cCall.parent_call_id && calls[cCall.parent_call_id])
@@ -148,6 +130,7 @@ function renderTimeline(callArray) {
       mode: 'lines',
       type: 'scatter',
       name: `${call.function} [${call.call_id}]`,
+       line: { width: 15 },  // increased from
       call_id: call.call_id,
             hovertemplate: `<br>Duration: ${durationSec} S</br><extra></extra>`
 
