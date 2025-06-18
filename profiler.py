@@ -7,6 +7,7 @@ import datetime as datetimeProfilerProtected
 import os as osProfilerProtected
 import itertools
 from typing import Callable, Any, Dict, Optional
+import atexit as atexitProfilerProtected
 
 
 # Base directory to store the log file (default = current dir or env var override)
@@ -19,6 +20,9 @@ CALL_ID_GENERATOR = itertools.count(1)
 
 # Thread-local call stack per thread
 CALL_STACK = threadingProfilerProtected.local()
+CURR_LOG_GILE =  open(LOG_FILE, "a",encoding='utf-8')
+
+PROGRAM_START_TIME = None
 
 def enter_function(function_name: str) -> Dict[str, Optional[int]]:
     """
@@ -49,43 +53,33 @@ def log_record(record: Dict[str, Any]) -> None:
     Thread-safe log writer.
     """
     with LOCK:
-        with open(LOG_FILE, "a",encoding='utf-8') as f:
-            f.write(jsonProfilerProtected.dumps(record) + "\n")
+        CURR_LOG_GILE.write(jsonProfilerProtected.dumps(record) + "\n")
 
 def profile(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Decorator that wraps both synchronous and asynchronous functions
     to log start and end events with call instance tracking.
     """
+    global PROGRAM_START_TIME
+    if not PROGRAM_START_TIME:
+        PROGRAM_START_TIME = datetimeProfilerProtected.datetime.now()
+        
     if inspectProfilerProtected.iscoroutinefunction(func):
         @functoolsProfilerProtected.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             context = enter_function(func.__qualname__)
-            call_id = context['call_id']
-            parent_call_id = context['parent_call_id']
-            now = datetimeProfilerProtected.datetime.now()
-            start_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
-            log_record([
-                start_time,
-                "start",
-                func.__qualname__,
-                call_id,
-                parent_call_id,
-                "async"
-            ])
-
+            start_time = datetimeProfilerProtected.datetime.now() - PROGRAM_START_TIME
             try:
                 return await func(*args, **kwargs)
             finally:
-                now = datetimeProfilerProtected.datetime.now()
-                end_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
+                duration = datetimeProfilerProtected.datetime.now() - PROGRAM_START_TIME  - start_time
                 log_record([
-                     end_time,
-                     "end",
+                     f'{start_time.total_seconds() * 1000:.4f}',
+                     f'{duration.total_seconds() * 1000:.4f}',
                      func.__qualname__,
-                     call_id,
-                     parent_call_id,
-                     "async"
+                     context['call_id'],
+                     context['parent_call_id'],
+                     1
                 ])
                 exit_function()
 
@@ -94,30 +88,25 @@ def profile(func: Callable[..., Any]) -> Callable[..., Any]:
     @functoolsProfilerProtected.wraps(func)
     def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
         context = enter_function(func.__qualname__)
-        call_id = context['call_id']
-        parent_call_id = context['parent_call_id']
-        now = datetimeProfilerProtected.datetime.now()
-        start_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
-        log_record([
-             start_time,
-             "start",
-             func.__qualname__,
-             call_id,
-             parent_call_id,
-             "sync"
-        ])
+        start_time = datetimeProfilerProtected.datetime.now() - PROGRAM_START_TIME
         try:
             return func(*args, **kwargs)
         finally:
-            now = datetimeProfilerProtected.datetime.now()
-            end_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
+            duration = datetimeProfilerProtected.datetime.now() - PROGRAM_START_TIME - start_time
             log_record([
-                 end_time,
-                 "end",
+                 f'{start_time.total_seconds() * 1000:.4f}',
+                 f'{duration.total_seconds() * 1000:.4f}',
                  func.__qualname__,
-                 call_id,
-                 parent_call_id,
-                 "sync"
-        ])
+                 context['call_id'],
+                 context['parent_call_id'],
+                 1
+            ])
             exit_function()
     return sync_wrapper
+
+def close_file():
+    """handels file closing at the end of program"""
+    CURR_LOG_GILE.close()
+
+
+atexitProfilerProtected.register(close_file)

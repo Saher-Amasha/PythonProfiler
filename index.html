@@ -304,7 +304,7 @@
     const workerCode = `
     self.addEventListener("message", async function(e) {
       const file = e.data.file;
-      const CHUNK_SIZE = 2*1024 * 1024 ;
+      const CHUNK_SIZE = 1024 ;
       let offset = 0;
       const decoder = new TextDecoder();
       let leftover = '';
@@ -325,12 +325,12 @@
             try {
               const arr = JSON.parse(line);
               const obj = {
-                time: arr[0],
-                event: arr[1],
+                start: parseFloat(arr[0]),
+                duration: parseFloat(arr[1]),
                 function: arr[2],
                 call_id: arr[3],
                 parent_call_id: arr[4],
-                type: arr[5]
+                is_async: parseInt(arr[5])
               };
               batch.push(obj);
             } catch (err) {
@@ -352,12 +352,12 @@
             try {
               const arr = JSON.parse(leftover);
               const obj = {
-                time: arr[0],
-                event: arr[1],
+                start: parseFloat(arr[0]),
+                duration: parseFloat(arr[1]),
                 function: arr[2],
                 call_id: arr[3],
                 parent_call_id: arr[4],
-                type: arr[5]
+                is_async: parseInt(arr[5])
               };
               self.postMessage({ type: "batch", data: [obj] });
             } catch (err) {
