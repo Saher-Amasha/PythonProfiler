@@ -35,7 +35,8 @@ class ProfilerState:
         self.log_file_path = osProfilerProtected.path.join(
             self.base_dir, "profiler_log.jsonl"
         )
-        self.log_file = open(self.log_file_path, "a", encoding="utf-8")
+        # Opened once and closed via atexit; keeping open for performance.
+        self.log_file = open(self.log_file_path, "a", encoding="utf-8") # pylint: disable=consider-using-with
         self.lock = threadingProfilerProtected.Lock()
         self.call_id_generator = itertools.count(1)
         self.call_stack = threadingProfilerProtected.local()
@@ -184,4 +185,5 @@ def close_file() -> None:
 
 
 # Register cleanup
-atexitProfilerProtected.register(close_file)
+# Opened once and closed via atexit; keeping open for performance.
+atexitProfilerProtected.register(close_file) # pylint: disable=consider-using-with
