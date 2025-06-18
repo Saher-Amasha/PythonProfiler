@@ -2,15 +2,15 @@
 
 let queue = []
 
-function queuehandler(ms){
-  
+function queuehandler(ms) {
+
   // Calculate the time difference in milliseconds
   queue.forEach(element => {
     const date1 = new Date();
     element();
-    while(new date()  -  date1 < ms)
+    while (new date() - date1 < ms)
       console.log("slept a tick")
-    });
+  });
 
 
 }
@@ -18,6 +18,7 @@ function queuehandler(ms){
 
 // GLOBAL STATE
 let calls = {};
+let deadBeat = {};
 let idMap = {};
 let aggregates = {};
 let processedBatches = 0;
@@ -51,49 +52,56 @@ function processBatch(batch) {
     var cCall;
     // Create or update call
     if (!calls[id]) {
-      calls[id] =  {
+      calls[id] = {
         call_id: id,
         parent_call_id: entry.parent_call_id,
         function: entry.function,
-        type: entry.type,
-        children : new Set(),
+        type: entry.is_async == 1 ? 'async' : 'sync',
+        children: new Set(),
         expanded: false,
-        start: null,
-        end: null
+        start: entry.start,
+        duration: entry.duration
       };
     }
 
     cCall = calls[id];
 
-    if (entry.event === "start") 
-      cCall.start = parseTime(entry.time);
-    else if (entry.event === "end") 
-      cCall.end = parseTime(entry.time);
-    
+    addToFlamegraph(cCall);
 
-    if (cCall.start && cCall.end)
-        addToFlamegraph(cCall);
-      
-    // Link to parent
-    if (cCall.parent_call_id && calls[cCall.parent_call_id])
-        calls[cCall.parent_call_id].children.add(cCall.call_id);
 
-    
+
+    // update aggregates
     if (!aggregates[entry.function]) {
       aggregates[entry.function] = { count: 0, total: 0 };
     }
     aggregates[entry.function].count += 1;
-    if (entry.start && entry.end) {
-      aggregates[entry.function].total += (entry.end - entry.start);
+    aggregates[entry.function].total += entry.duration;
+
+
+    // Link to parent and child
+    if (cCall.parent_call_id) {
+      if (!calls[cCall.parent_call_id]) {
+        if (!deadBeat[cCall.parent_call_id])
+          deadBeat[cCall.parent_call_id] = [];
+        deadBeat[cCall.parent_call_id].push(cCall.call_id)
+      } else {
+        calls[cCall.parent_call_id].children.add(cCall.call_id);
+      }
     }
+
+    if (deadBeat[cCall.call_id]) {
+      deadBeat[cCall.call_id].forEach(element => {
+        cCall.children.add(element);
+      });
+      deadBeat[cCall.call_id] = null;
+    }
+
   }
   processedBatches++;
 }
 
 
-
-
-// details handler
+// details handler ===============================================================================================================================================================================================================
 function showFunctionDetails(data) {
   let html = "<table class='profiler-table'>";
   html += "<thead><tr><th colspan='2'>Function Details</th></tr></thead><tbody>";
@@ -103,11 +111,8 @@ function showFunctionDetails(data) {
     html += `<tr><td>Parent:</td><td>${calls[data.parent_call_id].function} (${data.parent_call_id})</td></tr>`;
   }
   html += `<tr><td>Start:</td><td>${data.start || "missing"}</td></tr>`;
-  html += `<tr><td>End:</td><td>${data.end || "missing"}</td></tr>`;
-  if (data.start && data.end)
-    html += `<tr><td>Duration:</td><td>${data.end - data.start} ms</td></tr>`;
-  else
-    html += `<tr><td>Duration:</td><td>incomplete</td></tr>`;
+  html += `<tr><td>End:</td><td>${data.start + data.duration || "missing"}</td></tr>`;
+  html += `<tr><td>Duration:</td><td>${data.duration || "missing"} ms</td></tr>`;
   html += "</tbody></table>";
   document.getElementById("functionInfo").innerHTML = html;
 }
@@ -116,30 +121,32 @@ function showFunctionDetails(data) {
 const MAX_TIMELINE = 5000;
 function renderTimeline(callArray) {
   const limited = callArray.slice(0, MAX_TIMELINE);
-  const programStart = Math.min(...limited.map(c => c.start.getTime()));
-
   const bars = limited.map(call => {
-    let end = call.end || new Date();
-    const startSec = (call.start.getTime() - programStart) / 1000;
-    const endSec = (call.end  - programStart) / 1000;
-    const durationSec = (endSec - startSec).toFixed(2);
-    // 
+    const startSec = call.start / 1000
+    const endSec = (call.start + call.duration) / 1000;
+    const durationSec = call.duration / 1000;
+    if (durationSec < 1)
+      t = `<br>Duration: ${durationSec* 1000} ms</br><extra></extra>`
+    else
+      t = `<br>Duration: ${durationSec} s</br><extra></extra>`
+    
     return {
       x: [startSec, endSec],
       y: [call.function + ` [${call.call_id}]`, call.function + ` [${call.call_id}]`],
       mode: 'lines',
       type: 'scatter',
       name: `${call.function} [${call.call_id}]`,
-       line: { width: 15 },  // increased from
+      line: { width: 15 },  // increased from
       call_id: call.call_id,
-            hovertemplate: `<br>Duration: ${durationSec} S</br><extra></extra>`
+      hovertemplate: t
 
     };
   });
 
   Plotly.newPlot('timeline', bars, {
     title: 'Global Timeline',
-    xaxis: {       title: 'Time (s)',
+    xaxis: {
+      title: 'Time (s)',
       tickformat: '.1f',
       zeroline: false
     },
@@ -147,7 +154,7 @@ function renderTimeline(callArray) {
     plot_bgcolor: '#1e1e1e',
     font: { color: '#dcdcdc' },
     height: document.getElementById("timeline").clientHeight,
-    hovermode:'closest'
+    hovermode: 'closest'
   });
 }
 

@@ -1,4 +1,5 @@
-'''Main profiler code that will be injected'''
+"""Lightweight async/sync function profiler with JSONL logging and thread-safe call tracking."""
+
 import functools as functoolsProfilerProtected
 import inspect as inspectProfilerProtected
 import json as jsonProfilerProtected
@@ -7,117 +8,182 @@ import datetime as datetimeProfilerProtected
 import os as osProfilerProtected
 import itertools
 from typing import Callable, Any, Dict, Optional
+import atexit as atexitProfilerProtected
 
 
-# Base directory to store the log file (default = current dir or env var override)
-BASE_DIR: str = osProfilerProtected.getenv("PROFILER_BASE_DIR", osProfilerProtected.getcwd())
-LOG_FILE: str = osProfilerProtected.path.join(BASE_DIR, "profiler_log.jsonl")
-LOCK: threadingProfilerProtected.Lock = threadingProfilerProtected.Lock()
+class ProfilerState:
+    """
+    Singleton class that holds global state for the profiler:
+    - Program start time
+    - Log file handle
+    - Lock for thread-safe writing
+    - Unique call ID generator
+    - Per-thread call stacks
+    """
 
-# Global unique call ID generator
-CALL_ID_GENERATOR = itertools.count(1)
+    _instance = None
 
-# Thread-local call stack per thread
-CALL_STACK = threadingProfilerProtected.local()
+    def __init__(self):
+        """Initialize the singleton instance. Should only be called via ProfilerState.get()."""
+        if ProfilerState._instance is not None:
+            raise RuntimeError("Use ProfilerState.get() to access the singleton.")
+
+        self.program_start_time = datetimeProfilerProtected.datetime.now()
+        self.base_dir = osProfilerProtected.getenv(
+            "PROFILER_BASE_DIR", osProfilerProtected.getcwd()
+        )
+        self.log_file_path = osProfilerProtected.path.join(
+            self.base_dir, "profiler_log.jsonl"
+        )
+        # Opened once and closed via atexit; keeping open for performance.
+        self.log_file = open(self.log_file_path, "a", encoding="utf-8") # pylint: disable=consider-using-with
+        self.lock = threadingProfilerProtected.Lock()
+        self.call_id_generator = itertools.count(1)
+        self.call_stack = threadingProfilerProtected.local()
+
+    @classmethod
+    def get(cls) -> "ProfilerState":
+        """
+        Return the singleton instance of the profiler state.
+        Creates the instance on first access.
+        """
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def close(self) -> None:
+        """Close the log file. Registered to run automatically on program exit."""
+        self.log_file.close()
+
 
 def enter_function(function_name: str) -> Dict[str, Optional[int]]:
     """
-    Push current function onto thread-local call stack and return parent info.
+    Push the current function onto the thread-local call stack
+    and return the unique call ID and parent call ID (if any).
+
+    Args:
+        function_name: The fully-qualified name of the function being entered.
+
+    Returns:
+        Dictionary with `call_id` and `parent_call_id`.
     """
-    if not hasattr(CALL_STACK, 'stack'):
-        CALL_STACK.stack = []
+    state = ProfilerState.get()
+    if not hasattr(state.call_stack, "stack"):
+        state.call_stack.stack = []
 
-    call_id = next(CALL_ID_GENERATOR)
-    parent_call_id = CALL_STACK.stack[-1]['call_id'] if CALL_STACK.stack else None
+    call_id = next(state.call_id_generator)
+    parent_call_id = (
+        state.call_stack.stack[-1]["call_id"] if state.call_stack.stack else None
+    )
 
-    CALL_STACK.stack.append({
-        'function': function_name,
-        'call_id': call_id
-    })
+    state.call_stack.stack.append({"function": function_name, "call_id": call_id})
 
-    return {'call_id': call_id, 'parent_call_id': parent_call_id}
+    return {"call_id": call_id, "parent_call_id": parent_call_id}
+
 
 def exit_function() -> None:
     """
-    Pop current function from call stack.
+    Pop the most recent function from the thread-local call stack.
+    Called automatically after the wrapped function returns.
     """
-    if hasattr(CALL_STACK, 'stack') and CALL_STACK.stack:
-        CALL_STACK.stack.pop()
+    state = ProfilerState.get()
+    if hasattr(state.call_stack, "stack") and state.call_stack.stack:
+        state.call_stack.stack.pop()
 
-def log_record(record: Dict[str, Any]) -> None:
+
+def log_record(record: list) -> None:
     """
-    Thread-safe log writer.
+    Append a profiling event record to the JSONL log file in a thread-safe way.
+
+    Args:
+        record: A list containing :
+        [start(ms), duration(ms), function_name, call_id, parent_call_id, is_async (0/1)].
     """
-    with LOCK:
-        with open(LOG_FILE, "a",encoding='utf-8') as f:
-            f.write(jsonProfilerProtected.dumps(record) + "\n")
+    state = ProfilerState.get()
+    with state.lock:
+        state.log_file.write(jsonProfilerProtected.dumps(record) + "\n")
+
 
 def profile(func: Callable[..., Any]) -> Callable[..., Any]:
     """
-    Decorator that wraps both synchronous and asynchronous functions
-    to log start and end events with call instance tracking.
+    Decorator that instruments both synchronous and asynchronous functions
+    to log execution time, call hierarchy, and function metadata.
+
+    Args:
+        func: The function to wrap.
+
+    Returns:
+        A wrapped function that logs start time, duration, and parent-child relationships.
     """
+    state = ProfilerState.get()
+
     if inspectProfilerProtected.iscoroutinefunction(func):
+
         @functoolsProfilerProtected.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            """Wrapped async function with profiling."""
             context = enter_function(func.__qualname__)
-            call_id = context['call_id']
-            parent_call_id = context['parent_call_id']
-            now = datetimeProfilerProtected.datetime.now()
-            start_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
-            log_record([
-                start_time,
-                "start",
-                func.__qualname__,
-                call_id,
-                parent_call_id,
-                "async"
-            ])
-
+            start_time = (
+                datetimeProfilerProtected.datetime.now() - state.program_start_time
+            )
             try:
                 return await func(*args, **kwargs)
             finally:
-                now = datetimeProfilerProtected.datetime.now()
-                end_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
-                log_record([
-                     end_time,
-                     "end",
-                     func.__qualname__,
-                     call_id,
-                     parent_call_id,
-                     "async"
-                ])
+                duration = (
+                    datetimeProfilerProtected.datetime.now()
+                    - state.program_start_time
+                    - start_time
+                )
+                log_record(
+                    [
+                        round(start_time.total_seconds() * 1000, 4),
+                        round(duration.total_seconds() * 1000, 4),
+                        func.__qualname__,
+                        context["call_id"],
+                        context["parent_call_id"],
+                        1,  # is_async
+                    ]
+                )
                 exit_function()
 
         return async_wrapper
 
     @functoolsProfilerProtected.wraps(func)
     def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+        """Wrapped sync function with profiling."""
         context = enter_function(func.__qualname__)
-        call_id = context['call_id']
-        parent_call_id = context['parent_call_id']
-        now = datetimeProfilerProtected.datetime.now()
-        start_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
-        log_record([
-             start_time,
-             "start",
-             func.__qualname__,
-             call_id,
-             parent_call_id,
-             "sync"
-        ])
+        start_time = datetimeProfilerProtected.datetime.now() - state.program_start_time
         try:
             return func(*args, **kwargs)
         finally:
-            now = datetimeProfilerProtected.datetime.now()
-            end_time = now.strftime('%H:%M:%S')  + f".{now.microsecond // 1000:09d}"
-            log_record([
-                 end_time,
-                 "end",
-                 func.__qualname__,
-                 call_id,
-                 parent_call_id,
-                 "sync"
-        ])
+            duration = (
+                datetimeProfilerProtected.datetime.now()
+                - state.program_start_time
+                - start_time
+            )
+            log_record(
+                [
+                    round(start_time.total_seconds() * 1000, 4),
+                    round(duration.total_seconds() * 1000, 4),
+                    func.__qualname__,
+                    context["call_id"],
+                    context["parent_call_id"],
+                    0,  # is_sync
+                ]
+            )
             exit_function()
+
     return sync_wrapper
+
+
+def close_file() -> None:
+    """
+    Gracefully close the log file on program exit.
+    Automatically registered with atexit.
+    """
+    ProfilerState.get().close()
+
+
+# Register cleanup
+# Opened once and closed via atexit; keeping open for performance.
+atexitProfilerProtected.register(close_file) # pylint: disable=consider-using-with
