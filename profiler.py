@@ -63,7 +63,7 @@ def profile(func: Callable[..., Any]) -> Callable[..., Any]:
     global PROGRAM_START_TIME
     if not PROGRAM_START_TIME:
         PROGRAM_START_TIME = datetimeProfilerProtected.datetime.now()
-        
+
     if inspectProfilerProtected.iscoroutinefunction(func):
         @functoolsProfilerProtected.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -72,7 +72,8 @@ def profile(func: Callable[..., Any]) -> Callable[..., Any]:
             try:
                 return await func(*args, **kwargs)
             finally:
-                duration = datetimeProfilerProtected.datetime.now() - PROGRAM_START_TIME  - start_time
+                duration = datetimeProfilerProtected.datetime.now() - PROGRAM_START_TIME\
+                - start_time
                 log_record([
                      f'{start_time.total_seconds() * 1000:.4f}',
                      f'{duration.total_seconds() * 1000:.4f}',
