@@ -259,10 +259,15 @@
 
   <h1>Python Profiler Viewer</h1>
 
+  <!-- Add this input and comparison logic inside your HTML above -->
   <div id="controls">
     <label for="logFile">Choose Profiler Log</label>
     <input type="file" id="logFile" />
+    <label for="comparisonFile">Compare With...</label>
+    <input type="file" id="comparisonFile" />
   </div>
+
+
 
   <div id="split">
     <div id="left">
@@ -280,8 +285,9 @@
         <div class="tab" data-tab="compareTab">Compare</div>
       </div>
       <div id="timelineTab" class="tab-content active">
-        <div id="timeline">  <div id="timelineDiv" style="width: 100%; height: 600px;"></div>
-</div>
+        <div id="timeline">
+          <div id="timelineDiv" style="width: 100%; height: 600px;"></div>
+        </div>
       </div>
       <div id="flamegraphTab" class="tab-content">
         <div id="flamegraphView"></div>
@@ -459,7 +465,69 @@
     });
     resizeObserver.observe(document.getElementById("flamegraphView"));
 
+ // Handle comparison file
+  document.getElementById("comparisonFile").addEventListener("change", function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
 
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const lines = e.target.result.split('\n').filter(line => line.trim());
+      const comparisonCalls = lines.map(line => {
+        const arr = JSON.parse(line);
+        return {
+          start: parseFloat(arr[0]),
+          duration: parseFloat(arr[1]),
+          function: arr[2]
+        };
+      });
+
+      const compareMap = {};
+      for (const call of comparisonCalls) {
+        compareMap[call.function] = (compareMap[call.function] || 0) + call.duration;
+      }
+
+      const baseMap = {};
+      for (const id in calls) {
+        const call = calls[id];
+        baseMap[call.function] = (baseMap[call.function] || 0) + call.duration;
+      }
+
+      const resultRows = [];
+      const allFuncs = new Set([...Object.keys(baseMap), ...Object.keys(compareMap)]);
+      for (const name of allFuncs) {
+        const oldT = baseMap[name] || 0;
+        const newT = compareMap[name] || 0;
+        const delta = newT - oldT;
+        const color = delta < 0 ? 'lightgreen' : delta > 0 ? 'salmon' : '#dcdcdc';
+        resultRows.push({ name, oldT, newT, delta, color });
+      }
+
+      resultRows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+      const table = document.createElement("table");
+      table.className = "profiler-table";
+      table.innerHTML = `
+        <thead>
+          <tr><th>Function</th><th>Original</th><th>New</th><th>Delta</th></tr>
+        </thead>
+        <tbody>
+          ${resultRows.map(row => `
+            <tr>
+              <td style="color: ${row.color}">${row.name}</td>
+              <td style="color: ${row.color}">${row.oldT.toFixed(2)} ms</td>
+              <td style="color: ${row.color}">${row.newT.toFixed(2)} ms</td>
+              <td style="color: ${row.color}">${(row.delta > 0 ? '+' : '') + row.delta.toFixed(2)} ms</td>
+            </tr>`).join('')}
+        </tbody>
+      `;
+
+      document.getElementById("compareTable").innerHTML = "";
+      document.getElementById("compareTable").appendChild(table);
+    };
+
+    reader.readAsText(file);
+  });
   </script>
 
 </body>
