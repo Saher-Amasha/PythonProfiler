@@ -465,49 +465,49 @@
     });
     resizeObserver.observe(document.getElementById("flamegraphView"));
 
- // Handle comparison file
-  document.getElementById("comparisonFile").addEventListener("change", function (e) {
-    const file = e.target.files[0];
-    if (!file) return;
+    // Handle comparison file
+    document.getElementById("comparisonFile").addEventListener("change", function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      const lines = e.target.result.split('\n').filter(line => line.trim());
-      const comparisonCalls = lines.map(line => {
-        const arr = JSON.parse(line);
-        return {
-          start: parseFloat(arr[0]),
-          duration: parseFloat(arr[1]),
-          function: arr[2]
-        };
-      });
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const lines = e.target.result.split('\n').filter(line => line.trim());
+        const comparisonCalls = lines.map(line => {
+          const arr = JSON.parse(line);
+          return {
+            start: parseFloat(arr[0]),
+            duration: parseFloat(arr[1]),
+            function: arr[2]
+          };
+        });
 
-      const compareMap = {};
-      for (const call of comparisonCalls) {
-        compareMap[call.function] = (compareMap[call.function] || 0) + call.duration;
-      }
+        const compareMap = {};
+        for (const call of comparisonCalls) {
+          compareMap[call.function] = (compareMap[call.function] || 0) + call.duration;
+        }
 
-      const baseMap = {};
-      for (const id in calls) {
-        const call = calls[id];
-        baseMap[call.function] = (baseMap[call.function] || 0) + call.duration;
-      }
+        const baseMap = {};
+        for (const id in calls) {
+          const call = calls[id];
+          baseMap[call.function] = (baseMap[call.function] || 0) + call.duration;
+        }
 
-      const resultRows = [];
-      const allFuncs = new Set([...Object.keys(baseMap), ...Object.keys(compareMap)]);
-      for (const name of allFuncs) {
-        const oldT = baseMap[name] || 0;
-        const newT = compareMap[name] || 0;
-        const delta = newT - oldT;
-        const color = delta < 0 ? 'lightgreen' : delta > 0 ? 'salmon' : '#dcdcdc';
-        resultRows.push({ name, oldT, newT, delta, color });
-      }
+        const resultRows = [];
+        const allFuncs = new Set([...Object.keys(baseMap), ...Object.keys(compareMap)]);
+        for (const name of allFuncs) {
+          const oldT = baseMap[name] || 0;
+          const newT = compareMap[name] || 0;
+          const delta = newT - oldT;
+          const color = delta < 0 ? 'lightgreen' : delta > 0 ? 'salmon' : '#dcdcdc';
+          resultRows.push({ name, oldT, newT, delta, color });
+        }
 
-      resultRows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+        resultRows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 
-      const table = document.createElement("table");
-      table.className = "profiler-table";
-      table.innerHTML = `
+        const table = document.createElement("table");
+        table.className = "profiler-table";
+        table.innerHTML = `
         <thead>
           <tr><th>Function</th><th>Original</th><th>New</th><th>Delta</th></tr>
         </thead>
@@ -522,12 +522,12 @@
         </tbody>
       `;
 
-      document.getElementById("compareTable").innerHTML = "";
-      document.getElementById("compareTable").appendChild(table);
-    };
+        document.getElementById("compareTable").innerHTML = "";
+        document.getElementById("compareTable").appendChild(table);
+      };
 
-    reader.readAsText(file);
-  });
+      reader.readAsText(file);
+    });
   </script>
 
 </body>
