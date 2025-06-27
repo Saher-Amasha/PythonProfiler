@@ -1,21 +1,3 @@
-
-
-let queue = []
-
-function queuehandler(ms) {
-
-  // Calculate the time difference in milliseconds
-  queue.forEach(element => {
-    const date1 = new Date();
-    element();
-    while (new date() - date1 < ms)
-      console.log("slept a tick")
-  });
-
-
-}
-
-
 // GLOBAL STATE
 let calls = {};
 let deadBeat = {};
@@ -23,6 +5,7 @@ let idMap = {};
 let aggregates = {};
 let processedBatches = 0;
 const renderEvery = 5;
+let currentRoot = null;
 
 
 
@@ -33,6 +16,7 @@ function finalizeProcessing() {
   renderForest(forest);
   renderTimeline(Object.values(calls));
   renderSummary(aggregates);
+  addToFlamegraph(forest);
   renderFlamegraph(flamegraphRoot);
   if (forest) showFunctionDetails(forest[0]);
 }
@@ -40,9 +24,11 @@ function finalizeProcessing() {
 function maybeRender() {
   if (processedBatches % renderEvery === 0) {
     requestSummaryRender();
-    requestTreeRender();
+    renderForestSnapshot = buildForest(calls);
+    requestTreeRender(renderForestSnapshot);
+    
+    if (flamegraphActive){ addToFlamegraph(renderForestSnapshot); requestFlamegraphRender();}
     // renderTimeline(Object.values(calls));
-    // if (flamegraphActive) requestFlamegraphRender();
   }
 }
 
@@ -65,8 +51,6 @@ function processBatch(batch) {
     }
 
     cCall = calls[id];
-
-    addToFlamegraph(cCall);
 
 
 
@@ -184,7 +168,7 @@ function renderSummary(aggregates) {
 
 // Flame graph handler ===============================================================================================================================================================================================================
 let flamegraphLastRender = 0;
-const flamegraphRenderInterval = 100;
+const flamegraphRenderInterval = 1000;
 
 let resizeObserver;
 
@@ -199,7 +183,6 @@ const color = d3.scaleOrdinal(d3.schemeTableau10);
 function getNodePath(d) {
   return d.ancestors().map(n => n.data.name).reverse().join("/");
 }
-
 function renderFlamegraph(data) {
   const container = document.getElementById("flamegraphView");
   const width = container.clientWidth;
@@ -210,11 +193,15 @@ function renderFlamegraph(data) {
   const root = d3.hierarchy(data).sum(d => d.value);
   partition(root);
 
-  // Initialize SVG & zoom once
+  // Save for semantic zoom
+  currentRoot = data;
+
+  const MIN_WIDTH = 0;
+  const nodes = root.descendants().filter(d => (d.x1 - d.x0) > MIN_WIDTH);
+
   if (!flamegraphSVG) {
     flamegraphSVG = d3.select("#flamegraphView").append("svg")
-      .attr("width", width)
-      .attr("height", height);
+      .attr("width", width).attr("height", height);
 
     flamegraphG = flamegraphSVG.append("g");
 
@@ -222,9 +209,8 @@ function renderFlamegraph(data) {
       .on("zoom", (event) => flamegraphG.attr("transform", event.transform));
     flamegraphSVG.call(zoom);
 
-    // Add reset zoom button
     const button = document.createElement("button");
-    button.innerText = "Reset Zoom";
+    button.innerText = "Zoom Out";
     button.style.position = "absolute";
     button.style.top = "10px";
     button.style.right = "20px";
@@ -237,24 +223,26 @@ function renderFlamegraph(data) {
     button.style.cursor = "pointer";
     document.body.appendChild(button);
     button.onclick = () => {
-      flamegraphSVG.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+      renderFlamegraph(flamegraphRoot);
     };
   } else {
     flamegraphSVG.attr("width", width).attr("height", height);
   }
 
-  const rects = flamegraphG.selectAll("g.node")
-    .data(root.descendants(), getNodePath);
-
+  const rects = flamegraphG.selectAll("g.node").data(nodes, getNodePath);
   rects.exit().remove();
 
   const enter = rects.enter().append("g").attr("class", "node");
+  enter.append("rect");
+  enter.append("title");
 
-  enter.append("rect")
+  const merged = enter.merge(rects);
+
+  merged.select("rect")
     .attr("x", d => d.x0).attr("y", d => d.y0)
     .attr("width", d => d.x1 - d.x0).attr("height", d => d.y1 - d.y0)
     .attr("fill", d => color(d.data.name))
-    .on("click", (event, d) => zoomIntoNode(d, partition, root))
+    .on("click", (event, d) => zoomIntoNode(d))
     .on("mouseover", function (event, d) {
       d3.select(this).attr("stroke", "#fff").attr("stroke-width", 2);
       showTooltip(event, d);
@@ -264,17 +252,7 @@ function renderFlamegraph(data) {
       hideTooltip();
     });
 
-  enter.append("title")
-    .text(d => `${d.data.name}: ${Math.round(d.value)} ms`);
-
-  const merged = enter.merge(rects);
-  merged.select("rect").transition().duration(200)
-    .attr("x", d => d.x0).attr("y", d => d.y0)
-    .attr("width", d => d.x1 - d.x0).attr("height", d => d.y1 - d.y0)
-    .attr("fill", d => color(d.data.name));
-
-  merged.select("title")
-    .text(d => `${d.data.name}: ${Math.round(d.value)} ms`);
+  merged.select("title").text(d => `${d.data.name}: ${Math.round(d.value)} ms`);
 }
 
 function zoomIntoNode(target, partition, root) {
@@ -313,37 +291,44 @@ function hideTooltip() {
 }
 
 function addToFlamegraph(call) {
-  let current = call;
-  const path = [];
-  while (current) {
-    path.unshift(current.function);
-    current = current.parent_call_id ? calls[current.parent_call_id] : null;
-  }
-
-  let node = flamegraphRoot;
-  for (const func of path) {
-    let child = node.children.find(c => c.name === func);
-    if (!child) {
-      child = { name: func, value: 0, children: [] };
-      node.children.push(child);
-    }
-    node = child;
-  }
-  node.value += call.end - call.start;
+  flamegraphRoot = { name: "__ROOT__", value: 0, children: [] };
+  call.forEach(element => {
+    flamegraphRoot.children.push(get_path_from_root(element));
+  });
 }
 
 
+function get_path_from_root(call) {
+
+    const node = {
+        name: call.function,
+        value: call.duration,
+        children: []
+    };
+
+    // Recurse over children, if any
+    if (call.children && call.children.size > 0) {
+        for (const childCall of call.children) {
+            node.children.push(get_path_from_root(calls[childCall]));
+        }
+    }
+    return node;
+  
+
+}
 
 function requestFlamegraphRender() {
-  if (flamegraphRenderTimeout) {
-    clearTimeout(flamegraphRenderTimeout);
-  }
-  flamegraphRenderTimeout = setTimeout(() => {
+
+  const now = performance.now();
+  if (now - flamegraphLastRender >= flamegraphRenderInterval) {
+    summaryLastRender = now;
+    currentRoot = flamegraphRoot;
     renderFlamegraph(flamegraphRoot);
-  }, 100);  // slight delay to batch fast incoming updates
+  }
 }
-
-
+function zoomIntoNode(d) {
+  renderFlamegraph(d.data); // drill into this node
+}
 // tree Handler ===============================================================================================================================================================================================================
 let treeLastRender = 0;
 const treeRenderInterval = 100;
@@ -352,11 +337,10 @@ let rowPool = [];
 
 
 
-function requestTreeRender() {
+function requestTreeRender(renderForestSnapshot) {
   const now = performance.now();
   if (now - treeLastRender >= treeRenderInterval) {
     treeLastRender = now;
-    renderForestSnapshot = buildForest(calls);
     renderVirtualTree(renderForestSnapshot);
   }
 }
